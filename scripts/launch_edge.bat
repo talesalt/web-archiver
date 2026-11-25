@@ -18,6 +18,7 @@ start "" "%EDGE_EXE%" ^
   --no-first-run ^
   --no-default-browser-check ^
   --disable-features=msEdgeSidebarV2 ^
+  --disable-blink-features=AutomationControlled ^
   "%START_URL%"
 
 ping -n 4 127.0.0.1 >nul

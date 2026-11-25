@@ -25,6 +25,80 @@ from urllib.parse import urldefrag, urljoin, urlparse, urlunparse
 from urllib.robotparser import RobotFileParser
 
 DEFAULT_DEBUGGER = "127.0.0.1:9222"
+
+PATCH = r"""
+(() => {
+  try {
+    Object.defineProperty(Navigator.prototype, 'webdriver', {
+      get: () => false,
+      configurable: true
+    });
+  } catch (e) {}
+
+  if (!window.chrome) window.chrome = {};
+  if (!window.chrome.runtime) {
+    window.chrome.runtime = {
+      connect: () => {},
+      sendMessage: () => {},
+      id: undefined
+    };
+  }
+
+  const strip = (obj) => {
+    try {
+      for (const k of Object.getOwnPropertyNames(obj)) {
+        if (/^(\$?cdc_|__webdriver|__selenium|__fxdriver|__driver|_Selenium)/.test(k)) {
+          try { delete obj[k]; } catch (e) {}
+        }
+      }
+    } catch (e) {}
+  };
+  strip(window);
+  strip(document);
+
+  const nativeToString = Function.prototype.toString;
+  const patched = new WeakMap();
+  const fake = (name) => `function ${name}() { [native code] }`;
+
+  Function.prototype.toString = function () {
+    if (patched.has(this)) return patched.get(this);
+    return nativeToString.call(this);
+  };
+
+  for (const [o, n] of [
+    [window, 'alert'],
+    [window, 'fetch'],
+    [Document.prototype, 'querySelector'],
+    [window.navigator, 'sendBeacon']
+  ]) {
+    try { patched.set(o[n], fake(n)); } catch (e) {}
+  }
+
+  try {
+    const origQuery = navigator.permissions.query.bind(navigator.permissions);
+    navigator.permissions.query = (p) => origQuery(p).then(r => {
+      if (
+        p &&
+        p.name === 'notifications' &&
+        r.state === 'denied' &&
+        Notification.permission !== 'denied'
+      ) {
+        Object.defineProperty(r, 'state', {
+          get: () => Notification.permission
+        });
+      }
+      return r;
+    });
+  } catch (e) {}
+
+  try {
+    Object.defineProperty(Navigator.prototype, 'plugins', {
+      get: () => [1, 2, 3, 4, 5]
+    });
+  } catch (e) {}
+})();
+"""
+
 UA_TOKEN = "web-archiver"
 
 
@@ -241,6 +315,7 @@ def cmd_crawl(a):
     scope = Scope(seeds, a.scope, a.include, a.exclude)
     driver = attach_edge(a.debugger)
     driver.switch_to.new_window("tab")
+    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {"source": PATCH})
     robots = Robots(driver, a.ignore_robots)
     html_dir = Path(a.save_html) if a.save_html else None
     if html_dir:
