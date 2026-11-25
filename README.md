@@ -15,7 +15,7 @@ Usa um Microsoft Edge aberto por você, com perfil dedicado e porta de debug loc
 
 ```bash
 git clone https://github.com/talesalt/web-archiver ~/.claude/skills/web-archiver
-py -3 -m pip install --user selenium beautifulsoup4
+py -3 -m pip install --user -r ~/.claude/skills/web-archiver/requirements.txt
 ```
 
 ## Uso
